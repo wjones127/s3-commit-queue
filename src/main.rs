@@ -13,15 +13,17 @@ use futures::{ TryStreamExt, stream::FuturesOrdered, StreamExt};
 /// 
 /// Each lock creates two temporary objects:
 /// * Request: Any empty object that is used to indicate we are in the queue.
-///   The last modified time of this object is used to determine our position
-///   (with the value of our key as a tie-breaker).
+///   The last modified time of this object is used to determine our 
+///   initial relative position (with the value of our key as a tie-breaker).
 /// * Heartbeat: An object we continuously update to indicate we are still in
-///   the queue and haven't crashed.
+///   the queue and haven't crashed. The value of this object is the timestamp
+///   without the current heartbeat expiration.
 /// 
-/// After creating both objects, we check the heartbeat of the locks in front
-/// of us. If it is expired, we can move up in the queue. Once we reach the
-/// first position, we have the lock. If at any time we find the target object
-/// now exists, then we have been beaten and we can release our lock.
+/// After creating both objects, we check the heartbeat of the lock in front
+/// of us. If it is expired, we can move up in the queue (start looking at the
+/// next heartbeat). Once we reach the first position, we have the lock. If at
+/// any time we find the target object now exists, then we have been beaten
+/// and we can stop.
 struct ObjectLock {
     store: Arc<dyn ObjectStore>,
     request_path: Path,
@@ -153,6 +155,9 @@ async fn main() {
 
     let path = Path::from("test-lock");
 
+    // TODO: refactor this so that we are trying to write N objects in sequence
+    // TODO: add some latecomers
+    // TODO: add validation
     let mut tasks = (0..num_tasks).map(|i| {
         let store = store.clone();
         let path = path.clone();
